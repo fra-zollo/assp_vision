@@ -1,319 +1,439 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ASSP 2027 - Mappa 2D Parco Fiumi</title>
-<style>
-    :root {
-        --bg-main: #f0f4f8;
-        --color-palco: #ff4757;
-        --color-bar: #ffa502;
-        --color-ticket: #2ed573;
-        --color-hq: #9b59b6;
-        --text-dark: #2c3e50;
-    }
+    <meta charset="UTF-8">
+    <!-- Aggiunto viewport-fit=cover per gestire notch/safe-areas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>ASSP 2027 - Mappa 2D Parco Fiumi</title>
+    <style>
+        :root {
+            --bg-main: #f0f4f8;
+            --color-palco: #ff4757;
+            --color-bar: #ffa502;
+            --color-ticket: #2ed573;
+            --color-hq: #9b59b6;
+            --text-dark: #2c3e50;
+        }
 
-    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        * { 
+            box-sizing: border-box; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            -webkit-tap-highlight-color: transparent; /* Rimuove il flash blu al tap su mobile */
+        }
 
-    body {
-        margin: 0;
-        padding: 0;
-        background-color: var(--bg-main);
-        color: var(--text-dark);
-        overflow: hidden; 
-        touch-action: none; 
-    }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #a8e6cf;
+            color: var(--text-dark);
+            overflow: hidden; 
+            /* Sostituito touch-action: none con overscroll-behavior per permettere lo scroll della mappa */
+            overscroll-behavior-y: none;
+            overscroll-behavior-x: none;
+        }
 
-    /* HEADER */
-    .header {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        padding: 20px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0) 100%);
-        z-index: 10;
-        pointer-events: none;
-        text-align: center;
-    }
+        /* HEADER */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            /* Aggiunto safe-area per i notch dei telefoni moderni */
+            padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px 20px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0) 100%);
+            z-index: 50;
+            pointer-events: none;
+            text-align: center;
+        }
 
-    .header h1 {
-        margin: 0;
-        font-size: 24px;
-        font-weight: 800;
-        color: #1e272e;
-        text-shadow: 0 2px 4px rgba(255,255,255,0.8);
-    }
-    
-    .header p {
-        margin: 5px 0 0;
-        font-size: 14px;
-        font-weight: 600;
-        color: #57606f;
-    }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 800;
+            color: #1e272e;
+            text-shadow: 0 2px 4px rgba(255,255,255,0.8);
+        }
+        
+        .header p {
+            margin: 5px 0 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #57606f;
+        }
 
-    /* MAP CONTAINER */
-    .map-container {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-        background-color: #a8e6cf; 
-        overflow: hidden;
-    }
+        /* MAP CONTAINERS - Ottimizzati per il pan/scroll su mobile */
+        .map-viewport {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch; /* Scorrimento fluido nativo iOS */
+            /* Nasconde la barra di scorrimento per estetica */
+            scrollbar-width: none; 
+            -ms-overflow-style: none;
+        }
+        
+        .map-viewport::-webkit-scrollbar { 
+            display: none; 
+        }
 
-    /* SVG MAP BACKGROUND */
-    .map-svg {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        min-width: 100%;
-        min-height: 100%;
-        object-fit: cover;
-    }
+        .map-content {
+            position: relative;
+            /* Dimensioni fisse per mantenere coerente la posizione dei Pin in SVG */
+            width: 1200px;
+            height: 1200px;
+            background-color: #a8e6cf;
+            margin: 0 auto;
+        }
 
-    /* PINS / MARKERS */
-    .pin {
-        position: absolute;
-        transform: translate(-50%, -100%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        cursor: pointer;
-        z-index: 5;
-    }
+        /* SVG MAP BACKGROUND */
+        .map-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
 
-    .pin-icon {
-        width: 50px;
-        height: 50px;
-        background: white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 24px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        border: 3px solid;
-        position: relative;
-        animation: bounce 2s infinite ease-in-out;
-    }
+        /* PINS / MARKERS */
+        .pin {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: transform 0.15s ease;
+        }
 
-    .pin-label {
-        margin-top: 8px;
-        background: rgba(255,255,255,0.9);
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-size: 13px;
-        font-weight: 700;
-        color: #2c3e50;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        text-align: center;
-        white-space: nowrap;
-    }
+        .pin:active {
+            transform: translate(-50%, -95%) scale(0.95);
+        }
 
-    .pin::after {
-        content: '';
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 15px;
-        height: 15px;
-        background: inherit;
-        border-radius: 50%;
-        opacity: 0.5;
-        z-index: -1;
-    }
+        .pin-icon {
+            width: 50px;
+            height: 50px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border: 3px solid;
+            position: relative;
+            animation: bounce 2.5s infinite ease-in-out;
+            z-index: 2;
+        }
 
-    @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-8px); }
-    }
+        .pin-label {
+            margin-top: 8px;
+            background: rgba(255,255,255,0.95);
+            padding: 6px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #2c3e50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            text-align: center;
+            white-space: nowrap;
+            z-index: 3;
+        }
 
-    .pin-palco .pin-icon { border-color: var(--color-palco); color: var(--color-palco); }
-    .pin-bar .pin-icon { border-color: var(--color-bar); color: var(--color-bar); }
-    .pin-ticket .pin-icon { border-color: var(--color-ticket); color: var(--color-ticket); }
-    .pin-hq .pin-icon { border-color: var(--color-hq); color: var(--color-hq); }
+        .pin::after {
+            content: '';
+            position: absolute;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 18px;
+            height: 18px;
+            background: inherit;
+            border-radius: 50%;
+            opacity: 0.4;
+            z-index: 1;
+        }
 
-    .pulse {
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        background: inherit;
-        opacity: 0.4;
-        animation: pulsing 2s infinite;
-        z-index: -1;
-    }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
 
-    @keyframes pulsing {
-        0% { transform: scale(1); opacity: 0.6; }
-        100% { transform: scale(1.8); opacity: 0; }
-    }
+        .pin-palco .pin-icon { border-color: var(--color-palco); color: var(--color-palco); }
+        .pin-bar .pin-icon { border-color: var(--color-bar); color: var(--color-bar); }
+        .pin-ticket .pin-icon { border-color: var(--color-ticket); color: var(--color-ticket); }
+        .pin-hq .pin-icon { border-color: var(--color-hq); color: var(--color-hq); }
 
-    /* BOTTOM SHEET MODAL */
-    .bottom-sheet-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.6);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.3s ease;
-        z-index: 99;
-    }
+        .pulse {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: inherit;
+            opacity: 0.4;
+            animation: pulsing 2s infinite;
+            z-index: -1;
+        }
 
-    .bottom-sheet-overlay.active {
-        opacity: 1;
-        pointer-events: auto;
-    }
+        @keyframes pulsing {
+            0% { transform: scale(1); opacity: 0.6; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
 
-    .bottom-sheet {
-        position: fixed;
-        bottom: -100%;
-        left: 0;
-        width: 100%;
-        max-height: 85vh;
-        background: #ffffff;
-        border-radius: 24px 24px 0 0;
-        z-index: 100;
-        transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.05);
-        display: flex;
-        flex-direction: column;
-        box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
-    }
+        /* BOTTOM SHEET MODAL */
+        .bottom-sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 99;
+        }
 
-    .bottom-sheet.active {
-        bottom: 0;
-    }
+        .bottom-sheet-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
 
-    .sheet-drag-handle {
-        width: 40px;
-        height: 5px;
-        background: #dfe4ea;
-        border-radius: 3px;
-        margin: 15px auto;
-    }
+        .bottom-sheet {
+            position: fixed;
+            bottom: -100%;
+            left: 0;
+            width: 100%;
+            max-height: 85vh; /* Consente contenuti lunghi senza occupare tutto lo schermo */
+            background: #ffffff;
+            border-radius: 24px 24px 0 0;
+            z-index: 100;
+            transition: bottom 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.05);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 -5px 25px rgba(0,0,0,0.2);
+        }
 
-    .sheet-header {
-        padding: 0 25px 15px;
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        border-bottom: 1px solid #f1f2f6;
-    }
+        .bottom-sheet.active {
+            bottom: 0;
+        }
 
-    .sheet-icon {
-        font-size: 30px;
-    }
+        /* Isoliamo l'area di trascinamento per evitare che lo scroll del testo chiuda la modale */
+        .sheet-drag-area {
+            width: 100%;
+            touch-action: none; 
+            background: #ffffff;
+            border-radius: 24px 24px 0 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f1f2f6;
+            z-index: 2;
+        }
 
-    .sheet-title {
-        font-size: 20px;
-        font-weight: 800;
-        margin: 0;
-    }
+        .sheet-drag-handle {
+            width: 40px;
+            height: 5px;
+            background: #dfe4ea;
+            border-radius: 3px;
+            margin: 15px auto;
+        }
 
-    .sheet-content {
-        padding: 20px 25px 40px;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
+        .sheet-header {
+            padding: 0 25px 5px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
 
-    .bullet-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
+        .sheet-icon {
+            font-size: 28px;
+            background: #f8f9fa;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+        }
 
-    .bullet-list li {
-        margin-bottom: 18px;
-        padding-left: 28px;
-        position: relative;
-        font-size: 15px;
-        color: #57606f;
-        line-height: 1.5;
-    }
+        .sheet-title {
+            font-size: 20px;
+            font-weight: 800;
+            margin: 0;
+        }
 
-    .bullet-list li:last-child { margin-bottom: 0; }
+        /* Area interna scrollabile con safe area inferiore */
+        .sheet-content {
+            padding: 20px 25px calc(env(safe-area-inset-bottom, 20px) + 40px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
 
-    .bullet-list li::before {
-        content: "•";
-        position: absolute;
-        left: 5px;
-        top: 0px;
-        font-size: 24px;
-        line-height: 20px;
-    }
+        .bullet-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
 
-    .highlight {
-        color: #2f3542;
-        font-weight: 700;
-    }
+        .bullet-list li {
+            margin-bottom: 18px;
+            padding-left: 28px;
+            position: relative;
+            font-size: 15px;
+            color: #57606f;
+            line-height: 1.5;
+        }
 
-    /* Colori dinamici modal */
-    .theme-palco .sheet-title { color: var(--color-palco); }
-    .theme-palco .bullet-list li::before { color: var(--color-palco); }
-    
-    .theme-bar .sheet-title { color: var(--color-bar); }
-    .theme-bar .bullet-list li::before { color: var(--color-bar); }
-    
-    .theme-ticket .sheet-title { color: var(--color-ticket); }
-    .theme-ticket .bullet-list li::before { color: var(--color-ticket); }
-    
-    .theme-hq .sheet-title { color: var(--color-hq); }
-    .theme-hq .bullet-list li::before { color: var(--color-hq); }
+        .bullet-list li:last-child { margin-bottom: 0; }
 
-</style>
+        .bullet-list li::before {
+            content: "•";
+            position: absolute;
+            left: 5px;
+            top: 0px;
+            font-size: 24px;
+            line-height: 20px;
+        }
+
+        .highlight {
+            color: #2f3542;
+            font-weight: 700;
+        }
+
+        /* Colori dinamici modal */
+        .theme-palco .sheet-title { color: var(--color-palco); }
+        .theme-palco .bullet-list li::before { color: var(--color-palco); }
+        
+        .theme-bar .sheet-title { color: var(--color-bar); }
+        .theme-bar .bullet-list li::before { color: var(--color-bar); }
+        
+        .theme-ticket .sheet-title { color: var(--color-ticket); }
+        .theme-ticket .bullet-list li::before { color: var(--color-ticket); }
+        
+        .theme-hq .sheet-title { color: var(--color-hq); }
+        .theme-hq .bullet-list li::before { color: var(--color-hq); }
+
+        /* MAP CONTROLS */
+        .map-controls {
+            position: fixed;
+            right: 20px;
+            bottom: max(calc(env(safe-area-inset-bottom, 20px) + 20px), 40px);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 40;
+            pointer-events: auto;
+        }
+
+        .control-btn {
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #dfe4ea;
+            border-radius: 14px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            font-size: 20px;
+            color: #2f3542;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            -webkit-backdrop-filter: blur(5px);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .control-btn:active {
+            transform: scale(0.9);
+            background: #f1f2f6;
+        }
+    </style>
 </head>
 <body>
 
     <div class="header">
         <h1>ASSP 2027</h1>
-        <p>Mappa Parco Fiumi • Tappa un'area</p>
+        <p>Mappa Parco Fiumi • Esplora l'area</p>
     </div>
 
-    <div class="map-container">
-        <!-- SVG Mappa -->
-        <svg class="map-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
-            <rect width="1000" height="1000" fill="#a8e6cf"/>
-            <path d="M 100,100 L 300,150 L 250,350 L 50,250 Z" fill="#cfd8dc" opacity="0.6" />
-            <rect x="150" y="150" width="40" height="40" fill="#95a5a6" opacity="0.8"/>
-            <rect x="220" y="180" width="30" height="60" fill="#95a5a6" opacity="0.8"/>
-            <path d="M 500,1000 C 500,700 300,600 400,300 C 450,150 700,100 800,0" fill="none" stroke="#eccc68" stroke-width="40" opacity="0.7" stroke-linecap="round"/>
-            <path d="M 500,750 C 700,700 800,500 950,450" fill="none" stroke="#eccc68" stroke-width="30" opacity="0.7" stroke-linecap="round"/>
-            <circle cx="800" cy="200" r="60" fill="#2ecc71" opacity="0.8"/>
-            <circle cx="850" cy="250" r="40" fill="#27ae60" opacity="0.9"/>
-            <circle cx="150" cy="700" r="80" fill="#2ecc71" opacity="0.8"/>
-            <circle cx="250" cy="800" r="50" fill="#27ae60" opacity="0.9"/>
-            <circle cx="850" cy="800" r="70" fill="#2ecc71" opacity="0.8"/>
-        </svg>
+    <!-- CONTROLLI MAPPA -->
+    <div class="map-controls">
+        <button class="control-btn" onclick="zoomIn()" aria-label="Zoom In">➕</button>
+        <button class="control-btn" onclick="zoomOut()" aria-label="Zoom Out">➖</button>
+        <button class="control-btn" onclick="centerMap()" aria-label="Centra Mappa">🎯</button>
+    </div>
 
-        <!-- PIN 1: PALCO -->
-        <div class="pin pin-palco" style="top: 25%; left: 45%;" onclick="openSheet('palco')">
-            <div class="pin-icon">🎸<div class="pulse" style="background: var(--color-palco)"></div></div>
-            <div class="pin-label">Il Palco</div>
-        </div>
+    <!-- Viewport che gestisce lo scroll e il pan -->
+    <div class="map-viewport" id="mapViewport">
+        
+        <!-- Mappa a dimensioni fisse per garantire coerenza UI -->
+        <div class="map-content" id="mapContent" style="transition: width 0.3s ease, height 0.3s ease;">
+            <!-- SVG Mappa Base -->
+            <svg class="map-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Sfondo prato base -->
+                <rect width="1000" height="1000" fill="#a8e6cf"/>
+                
+                <!-- Fiume (River) -->
+                <path d="M -50,300 Q 300,350 450,700 T 950,1100 L -50,1100 Z" fill="#81ecec" opacity="0.7"/>
+                <path d="M -50,270 Q 300,320 450,670 T 950,1070 L 950,1100 L -50,1100 Z" fill="#74b9ff" opacity="0.5"/>
+                
+                <!-- Strade/Sentieri in terra -->
+                <path d="M 500,850 Q 500,600 450,250" fill="none" stroke="#ffeaa7" stroke-width="45" opacity="0.8" stroke-linecap="round"/>
+                <path d="M 470,550 Q 750,550 750,700" fill="none" stroke="#ffeaa7" stroke-width="35" opacity="0.8" stroke-linecap="round"/>
+                <path d="M 450,250 Q 300,200 250,600" fill="none" stroke="#ffeaa7" stroke-width="30" opacity="0.8" stroke-linecap="round"/>
 
-        <!-- PIN 2: BAR -->
-        <div class="pin pin-bar" style="top: 55%; left: 75%;" onclick="openSheet('bar')">
-            <div class="pin-icon">🍻<div class="pulse" style="background: var(--color-bar)"></div></div>
-            <div class="pin-label">Bar Orizzontale</div>
-        </div>
+                <!-- Alberi e Vegetazione -->
+                <circle cx="150" cy="150" r="45" fill="#2ecc71" opacity="0.85"/>
+                <circle cx="190" cy="120" r="35" fill="#27ae60" opacity="0.9"/>
+                <circle cx="120" cy="190" r="40" fill="#2ecc71" opacity="0.8"/>
 
-        <!-- PIN 3: BIGLIETTERIA -->
-        <div class="pin pin-ticket" style="top: 85%; left: 50%;" onclick="openSheet('ticket')">
-            <div class="pin-icon">🎟️<div class="pulse" style="background: var(--color-ticket)"></div></div>
-            <div class="pin-label">Ingresso & Ticket</div>
-        </div>
+                <circle cx="850" cy="250" r="55" fill="#2ecc71" opacity="0.85"/>
+                <circle cx="790" cy="220" r="45" fill="#27ae60" opacity="0.9"/>
+                
+                <circle cx="200" cy="850" r="65" fill="#2ecc71" opacity="0.85"/>
+                <circle cx="260" cy="790" r="45" fill="#27ae60" opacity="0.9"/>
+                <circle cx="140" cy="800" r="35" fill="#2ecc71" opacity="0.8"/>
 
-        <!-- PIN 4: HQ STAFF -->
-        <div class="pin pin-hq" style="top: 60%; left: 25%;" onclick="openSheet('hq')">
-            <div class="pin-icon">⚙️<div class="pulse" style="background: var(--color-hq)"></div></div>
-            <div class="pin-label">HQ & Processi</div>
+                <!-- Zone di pertinenza (Aree evidenziate) -->
+                <!-- Area Palco -->
+                <rect x="300" y="150" width="300" height="150" rx="20" fill="#ff7675" opacity="0.2"/>
+                <rect x="380" y="210" width="140" height="50" rx="5" fill="#d63031" opacity="0.5"/>
+                
+                <!-- Area Bar -->
+                <rect x="680" y="650" width="140" height="90" rx="15" fill="#fdcb6e" opacity="0.3"/>
+                
+                <!-- Area HQ -->
+                <circle cx="250" cy="600" r="75" fill="#a29bfe" opacity="0.2"/>
+            </svg>
+
+            <!-- PIN 1: PALCO -->
+            <div class="pin pin-palco" style="top: 25%; left: 45%;" onclick="openSheet('palco')">
+                <div class="pin-icon">🎸<div class="pulse" style="background: var(--color-palco)"></div></div>
+                <div class="pin-label">Il Palco</div>
+            </div>
+
+            <!-- PIN 2: BAR -->
+            <div class="pin pin-bar" style="top: 55%; left: 75%;" onclick="openSheet('bar')">
+                <div class="pin-icon">🍻<div class="pulse" style="background: var(--color-bar)"></div></div>
+                <div class="pin-label">Bar Orizzontale</div>
+            </div>
+
+            <!-- PIN 3: BIGLIETTERIA -->
+            <div class="pin pin-ticket" style="top: 85%; left: 50%;" onclick="openSheet('ticket')">
+                <div class="pin-icon">🎟️<div class="pulse" style="background: var(--color-ticket)"></div></div>
+                <div class="pin-label">Ingresso & Ticket</div>
+            </div>
+
+            <!-- PIN 4: HQ STAFF -->
+            <div class="pin pin-hq" style="top: 60%; left: 25%;" onclick="openSheet('hq')">
+                <div class="pin-icon">⚙️<div class="pulse" style="background: var(--color-hq)"></div></div>
+                <div class="pin-label">HQ & Processi</div>
+            </div>
         </div>
     </div>
 
@@ -321,11 +441,15 @@
     <div class="bottom-sheet-overlay" id="sheet-overlay" onclick="closeSheet()"></div>
     
     <div class="bottom-sheet" id="bottom-sheet">
-        <div class="sheet-drag-handle"></div>
-        <div class="sheet-header" id="sheet-header">
-            <div class="sheet-icon" id="sheet-icon">🎸</div>
-            <h2 class="sheet-title" id="sheet-title">Titolo</h2>
+        <!-- Area dedicata esclusivamente al trascinamento (permette lo scroll del listato) -->
+        <div class="sheet-drag-area" id="sheet-drag-area">
+            <div class="sheet-drag-handle"></div>
+            <div class="sheet-header" id="sheet-header">
+                <div class="sheet-icon" id="sheet-icon">🎸</div>
+                <h2 class="sheet-title" id="sheet-title">Titolo</h2>
+            </div>
         </div>
+        <!-- Area di scorrimento reale dei contenuti -->
         <div class="sheet-content">
             <ul class="bullet-list" id="sheet-list">
                 <!-- Contenuto via JS -->
@@ -390,6 +514,7 @@
         const sheetIcon = document.getElementById('sheet-icon');
         const sheetTitle = document.getElementById('sheet-title');
         const sheetList = document.getElementById('sheet-list');
+        const sheetDragArea = document.getElementById('sheet-drag-area'); // Area limitata per il drag
 
         function openSheet(id) {
             const data = feedbackData[id];
@@ -417,17 +542,90 @@
             bottomSheet.classList.remove('active');
         }
 
+        // --- GESTIONE DRAG-TO-CLOSE OTTIMIZZATA PER MOBILE ---
+        // Ora il touch è limitato ESCLUSIVAMENTE a "sheet-drag-area" (Header e Barra)
+        // Questo previene la chiusura accidentale mentre l'utente scrolla i testi lunghi.
         let startY = 0;
-        bottomSheet.addEventListener('touchstart', e => {
+        
+        sheetDragArea.addEventListener('touchstart', e => {
             startY = e.touches[0].clientY;
         }, {passive: true});
 
-        bottomSheet.addEventListener('touchmove', e => {
+        sheetDragArea.addEventListener('touchmove', e => {
             const currentY = e.touches[0].clientY;
-            if(currentY - startY > 50) { 
+            // Se trascina verso il basso più di 40px, chiudi.
+            if(currentY - startY > 40) { 
                 closeSheet();
             }
         }, {passive: true});
+
+        // --- SISTEMA DI ZOOM E PANNING ---
+        let currentZoom = 1;
+        const baseSize = 1200;
+        const mapContent = document.getElementById('mapContent');
+        const viewport = document.getElementById('mapViewport');
+
+        function updateZoom(newZoom) {
+            // Limiti di zoom (tra 50% e 250%)
+            if(newZoom < 0.5) newZoom = 0.5;
+            if(newZoom > 2.5) newZoom = 2.5;
+            
+            // Per mantenere il centro durante lo zoom
+            const scrollLeftBefore = viewport.scrollLeft;
+            const scrollTopBefore = viewport.scrollTop;
+            const centerX = scrollLeftBefore + (viewport.clientWidth / 2);
+            const centerY = scrollTopBefore + (viewport.clientHeight / 2);
+            
+            const ratio = newZoom / currentZoom;
+            currentZoom = newZoom;
+            
+            // Applica le nuove dimensioni al contenitore della mappa
+            const newSize = baseSize * currentZoom;
+            mapContent.style.width = newSize + 'px';
+            mapContent.style.height = newSize + 'px';
+            
+            // Aggiusta lo scorrimento
+            setTimeout(() => {
+                viewport.scrollLeft = (centerX * ratio) - (viewport.clientWidth / 2);
+                viewport.scrollTop = (centerY * ratio) - (viewport.clientHeight / 2);
+            }, 10); 
+        }
+
+        function zoomIn() { 
+            updateZoom(currentZoom + 0.3); 
+        }
+        
+        function zoomOut() { 
+            updateZoom(currentZoom - 0.3); 
+        }
+
+        function centerMap() {
+            // Resetta la mappa alla dimensione di base (1x zoom) se alterata
+            if(currentZoom !== 1) {
+                currentZoom = 1;
+                mapContent.style.width = baseSize + 'px';
+                mapContent.style.height = baseSize + 'px';
+            }
+            
+            // Scorri dolcemente verso il centro esatto
+            setTimeout(() => {
+                const targetX = (baseSize - window.innerWidth) / 2;
+                const targetY = (baseSize - window.innerHeight) / 2;
+                viewport.scrollTo({
+                    left: targetX > 0 ? targetX : 0,
+                    top: targetY > 0 ? targetY : 0,
+                    behavior: 'smooth'
+                });
+            }, 50);
+        }
+
+        // --- AUTO CENTRAGGIO DELLA MAPPA ---
+        // Centra automaticamente la visuale al caricamento della pagina
+        window.addEventListener('DOMContentLoaded', () => {
+            // Un piccolo ritardo assicura che il CSS sia caricato prima di calcolare le dimensioni
+            setTimeout(centerMap, 100);
+        });
+
     </script>
 </body>
 </html>
