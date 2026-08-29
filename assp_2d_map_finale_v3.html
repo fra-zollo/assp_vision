@@ -1,0 +1,433 @@
+
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ASSP 2027 - Mappa 2D Parco Fiumi</title>
+<style>
+    :root {
+        --bg-main: #f0f4f8;
+        --color-palco: #ff4757;
+        --color-bar: #ffa502;
+        --color-ticket: #2ed573;
+        --color-hq: #9b59b6;
+        --text-dark: #2c3e50;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-main);
+        color: var(--text-dark);
+        overflow: hidden; 
+        touch-action: none; 
+    }
+
+    /* HEADER */
+    .header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        padding: 20px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0) 100%);
+        z-index: 10;
+        pointer-events: none;
+        text-align: center;
+    }
+
+    .header h1 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 800;
+        color: #1e272e;
+        text-shadow: 0 2px 4px rgba(255,255,255,0.8);
+    }
+    
+    .header p {
+        margin: 5px 0 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #57606f;
+    }
+
+    /* MAP CONTAINER */
+    .map-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        background-color: #a8e6cf; 
+        overflow: hidden;
+    }
+
+    /* SVG MAP BACKGROUND */
+    .map-svg {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        min-width: 100%;
+        min-height: 100%;
+        object-fit: cover;
+    }
+
+    /* PINS / MARKERS */
+    .pin {
+        position: absolute;
+        transform: translate(-50%, -100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: pointer;
+        z-index: 5;
+    }
+
+    .pin-icon {
+        width: 50px;
+        height: 50px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        border: 3px solid;
+        position: relative;
+        animation: bounce 2s infinite ease-in-out;
+    }
+
+    .pin-label {
+        margin-top: 8px;
+        background: rgba(255,255,255,0.9);
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #2c3e50;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .pin::after {
+        content: '';
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 15px;
+        height: 15px;
+        background: inherit;
+        border-radius: 50%;
+        opacity: 0.5;
+        z-index: -1;
+    }
+
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+    }
+
+    .pin-palco .pin-icon { border-color: var(--color-palco); color: var(--color-palco); }
+    .pin-bar .pin-icon { border-color: var(--color-bar); color: var(--color-bar); }
+    .pin-ticket .pin-icon { border-color: var(--color-ticket); color: var(--color-ticket); }
+    .pin-hq .pin-icon { border-color: var(--color-hq); color: var(--color-hq); }
+
+    .pulse {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        background: inherit;
+        opacity: 0.4;
+        animation: pulsing 2s infinite;
+        z-index: -1;
+    }
+
+    @keyframes pulsing {
+        0% { transform: scale(1); opacity: 0.6; }
+        100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    /* BOTTOM SHEET MODAL */
+    .bottom-sheet-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+        z-index: 99;
+    }
+
+    .bottom-sheet-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .bottom-sheet {
+        position: fixed;
+        bottom: -100%;
+        left: 0;
+        width: 100%;
+        max-height: 85vh;
+        background: #ffffff;
+        border-radius: 24px 24px 0 0;
+        z-index: 100;
+        transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.05);
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 -5px 20px rgba(0,0,0,0.2);
+    }
+
+    .bottom-sheet.active {
+        bottom: 0;
+    }
+
+    .sheet-drag-handle {
+        width: 40px;
+        height: 5px;
+        background: #dfe4ea;
+        border-radius: 3px;
+        margin: 15px auto;
+    }
+
+    .sheet-header {
+        padding: 0 25px 15px;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        border-bottom: 1px solid #f1f2f6;
+    }
+
+    .sheet-icon {
+        font-size: 30px;
+    }
+
+    .sheet-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .sheet-content {
+        padding: 20px 25px 40px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .bullet-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .bullet-list li {
+        margin-bottom: 18px;
+        padding-left: 28px;
+        position: relative;
+        font-size: 15px;
+        color: #57606f;
+        line-height: 1.5;
+    }
+
+    .bullet-list li:last-child { margin-bottom: 0; }
+
+    .bullet-list li::before {
+        content: "•";
+        position: absolute;
+        left: 5px;
+        top: 0px;
+        font-size: 24px;
+        line-height: 20px;
+    }
+
+    .highlight {
+        color: #2f3542;
+        font-weight: 700;
+    }
+
+    /* Colori dinamici modal */
+    .theme-palco .sheet-title { color: var(--color-palco); }
+    .theme-palco .bullet-list li::before { color: var(--color-palco); }
+    
+    .theme-bar .sheet-title { color: var(--color-bar); }
+    .theme-bar .bullet-list li::before { color: var(--color-bar); }
+    
+    .theme-ticket .sheet-title { color: var(--color-ticket); }
+    .theme-ticket .bullet-list li::before { color: var(--color-ticket); }
+    
+    .theme-hq .sheet-title { color: var(--color-hq); }
+    .theme-hq .bullet-list li::before { color: var(--color-hq); }
+
+</style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>ASSP 2027</h1>
+        <p>Mappa Parco Fiumi • Tappa un'area</p>
+    </div>
+
+    <div class="map-container">
+        <!-- SVG Mappa -->
+        <svg class="map-svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+            <rect width="1000" height="1000" fill="#a8e6cf"/>
+            <path d="M 100,100 L 300,150 L 250,350 L 50,250 Z" fill="#cfd8dc" opacity="0.6" />
+            <rect x="150" y="150" width="40" height="40" fill="#95a5a6" opacity="0.8"/>
+            <rect x="220" y="180" width="30" height="60" fill="#95a5a6" opacity="0.8"/>
+            <path d="M 500,1000 C 500,700 300,600 400,300 C 450,150 700,100 800,0" fill="none" stroke="#eccc68" stroke-width="40" opacity="0.7" stroke-linecap="round"/>
+            <path d="M 500,750 C 700,700 800,500 950,450" fill="none" stroke="#eccc68" stroke-width="30" opacity="0.7" stroke-linecap="round"/>
+            <circle cx="800" cy="200" r="60" fill="#2ecc71" opacity="0.8"/>
+            <circle cx="850" cy="250" r="40" fill="#27ae60" opacity="0.9"/>
+            <circle cx="150" cy="700" r="80" fill="#2ecc71" opacity="0.8"/>
+            <circle cx="250" cy="800" r="50" fill="#27ae60" opacity="0.9"/>
+            <circle cx="850" cy="800" r="70" fill="#2ecc71" opacity="0.8"/>
+        </svg>
+
+        <!-- PIN 1: PALCO -->
+        <div class="pin pin-palco" style="top: 25%; left: 45%;" onclick="openSheet('palco')">
+            <div class="pin-icon">🎸<div class="pulse" style="background: var(--color-palco)"></div></div>
+            <div class="pin-label">Il Palco</div>
+        </div>
+
+        <!-- PIN 2: BAR -->
+        <div class="pin pin-bar" style="top: 55%; left: 75%;" onclick="openSheet('bar')">
+            <div class="pin-icon">🍻<div class="pulse" style="background: var(--color-bar)"></div></div>
+            <div class="pin-label">Bar Orizzontale</div>
+        </div>
+
+        <!-- PIN 3: BIGLIETTERIA -->
+        <div class="pin pin-ticket" style="top: 85%; left: 50%;" onclick="openSheet('ticket')">
+            <div class="pin-icon">🎟️<div class="pulse" style="background: var(--color-ticket)"></div></div>
+            <div class="pin-label">Ingresso & Ticket</div>
+        </div>
+
+        <!-- PIN 4: HQ STAFF -->
+        <div class="pin pin-hq" style="top: 60%; left: 25%;" onclick="openSheet('hq')">
+            <div class="pin-icon">⚙️<div class="pulse" style="background: var(--color-hq)"></div></div>
+            <div class="pin-label">HQ & Processi</div>
+        </div>
+    </div>
+
+    <!-- BOTTOM SHEET -->
+    <div class="bottom-sheet-overlay" id="sheet-overlay" onclick="closeSheet()"></div>
+    
+    <div class="bottom-sheet" id="bottom-sheet">
+        <div class="sheet-drag-handle"></div>
+        <div class="sheet-header" id="sheet-header">
+            <div class="sheet-icon" id="sheet-icon">🎸</div>
+            <h2 class="sheet-title" id="sheet-title">Titolo</h2>
+        </div>
+        <div class="sheet-content">
+            <ul class="bullet-list" id="sheet-list">
+                <!-- Contenuto via JS -->
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const feedbackData = {
+            "palco": {
+                theme: "theme-palco",
+                icon: "🎸",
+                title: "Palco, Tecnica & Artisti",
+                items: [
+                    "<span class='highlight'>Libertà Lineup & Artisti:</span> Piena fiducia al gruppo Artisti. No alle intromissioni esterne e contatti tramite conoscenze (no booking). Obiettivo: piccoli emergenti che spaccano per creare uno show energico e diversificato.",
+                    "<span class='highlight'>Palco, Spazi & Luci:</span> Molta più libertà per l'estetica. Sostituire la copertura con teli grossi per fare un palco 'aperto', investire in un vero show luci e inserire un doppio palco (per dj set o aperture).",
+                    "<span class='highlight'>Estetica del Parco:</span> Curare il parco in grande anticipo. Coinvolgere writers, usare oggetti di riciclo, ispirandosi allo stile del 'Fritz Festival' (magari destinare un budget di 1-2k per l'estetica).",
+                    "<span class='highlight'>La Domenica:</span> Troppi dubbi sulla serata musicale domenicale. Meglio uno spettacolo, stand-up comedy o pausa per recuperare energie.",
+                    "<span class='highlight'>Artist Camp & Respect:</span> Prevedere uno spazio 'camp' dove gli artisti possono fare rete/scrivere (es. da Ago). Riconoscere sempre un cachet simbolico (es. 100€) per gli act di ASSP piccolo."
+                ]
+            },
+            "bar": {
+                theme: "theme-bar",
+                icon: "🍻",
+                title: "Bar, Food & Estetica",
+                items: [
+                    "<span class='highlight'>Il 'Nuovo' Bar:</span> Basta col casottino esagonale di Fazio (va bene solo per ASSP piccolo). Serve un bar sviluppato in orizzontale, ben curato, con pedane igieniche contro erba e terra. Dedicare budget specifico già da ottobre.",
+                    "<span class='highlight'>Gestione Flussi & Turni:</span> Organizzare i turni in modo più elastico: chi fa il bar deve essere disponibile a coprire altri se c'è bisogno. Serve personale dedicato allo smontaggio fisico del bar. Valutare linee separate per birra e cocktail.",
+                    "<span class='highlight'>Sicurezza dedicata:</span> Indispensabile avere un addetto della sicurezza fisso vicino al bar durante i grandi concerti per prevenire problemi.",
+                    "<span class='highlight'>Gestione Food 'Sagra':</span> Gestiamo noi il cibo in stile sagra per aumentare le casse di ASSP, oppure affidiamolo a figure dedicate (come Matteo) pattuendo una percentuale chiara.",
+                    "<span class='highlight'>Sostenibilità:</span> Meno plastica, meno sprechi, più differenziata e attenzione ai fornitori (evitare prodotti filo-israele)."
+                ]
+            },
+            "ticket": {
+                theme: "theme-ticket",
+                icon: "🎟️",
+                title: "Biglietteria & Rete",
+                items: [
+                    "<span class='highlight'>Strategia Ticketing:</span> Abbandonare l'attuale piattaforma (TicketSms). Tornare al biglietto singolo con tariffa minima di 15€, mantenendo le opzioni di abbonamento (anche 'al buio'). Valutare se fare l'offerta libera per altre serate.",
+                    "<span class='highlight'>Formazione Accoglienza:</span> Il gruppo cassa dev'essere indipendente e strutturato. I volontari in biglietteria non devono solo 'vendere': devono saper raccontare cos'è ASSP e cosa rappresenta.",
+                    "<span class='highlight'>Rete e Convenzioni Volterra:</span> Istituire un gruppo dedicato (3-4 persone) che lavori tutto l'anno per creare connessioni e convenzioni con alberghi, campeggi, ristoranti per agevolare il pubblico fuori sede."
+                ]
+            },
+            "hq": {
+                theme: "theme-hq",
+                icon: "⚙️",
+                title: "Processi, Budget & Staff",
+                items: [
+                    "<span class='highlight'>La Struttura (I 9 Macrogruppi):</span> 1 Responsabile e 1 Vice per: Comms, Tecnici, Artisti, Soldi, Lab, Volontari, Hospitality, Responsabili. Programmare fin da subito 4 o 5 riunioni generali e una riunione sul 'concept'.",
+                    "<span class='highlight'>Sinergia Lab & Festival:</span> Rivendicando la nostra forte indipendenza (già dimostrata), se ci sarà un Lab diurno è essenziale rendere molto più chiara la connessione e la transizione verso il festival serale. I dibattiti andrebbero orientati verso inclusione, associazionismo o format con Youtuber.",
+                    "<span class='highlight'>Premiare i Volontari:</span> Siamo un festival basato sul volontariato: il Pass Staff e l'ingresso restano garantiti a tutti coloro che aiutano. L'obiettivo è fare chiarezza tra chi coordina e chi dà una mano occasionale (es. ASSPetta Agosto), introducendo *ulteriori premi* (es. ticket bevute) per valorizzare ulteriormente lo sforzo di chi si impegna costantemente. Nominare un responsabile turni e fare le call in anticipo.",
+                    "<span class='highlight'>Budget e Attrezzature:</span> Darsi un budget iniziale per ogni area con un 'cuscinetto' per le emergenze (es. fonico). Comprare attrezzatura di proprietà per responsabilizzare chi la usa e abbattere i costi nel tempo.",
+                    "<span class='highlight'>Fare Comunità:</span> Garantire e valorizzare i pranzi e le cene di staff nel parco (più il 'check caffè') per vivere il festival e fare gruppo.",
+                    "<span class='highlight'>Comunicazione e Flussi:</span> Serve un calendario turni dedicato per foto/video durante i concerti per non sfiancare 1 o 2 persone. Produrre contenuti visivi più originali (stile Fritz). Rispettare le scadenze sulle grafiche in corso d'opera (no check 'a gamba tesa')."
+                ]
+            }
+        };
+
+        const overlay = document.getElementById('sheet-overlay');
+        const bottomSheet = document.getElementById('bottom-sheet');
+        
+        const sheetIcon = document.getElementById('sheet-icon');
+        const sheetTitle = document.getElementById('sheet-title');
+        const sheetList = document.getElementById('sheet-list');
+
+        function openSheet(id) {
+            const data = feedbackData[id];
+            if(!data) return;
+
+            bottomSheet.className = 'bottom-sheet';
+            bottomSheet.classList.add(data.theme);
+
+            sheetIcon.innerText = data.icon;
+            sheetTitle.innerText = data.title;
+            
+            sheetList.innerHTML = '';
+            data.items.forEach(item => {
+                const li = document.createElement('li');
+                li.innerHTML = item;
+                sheetList.appendChild(li);
+            });
+
+            overlay.classList.add('active');
+            bottomSheet.classList.add('active');
+        }
+
+        function closeSheet() {
+            overlay.classList.remove('active');
+            bottomSheet.classList.remove('active');
+        }
+
+        let startY = 0;
+        bottomSheet.addEventListener('touchstart', e => {
+            startY = e.touches[0].clientY;
+        }, {passive: true});
+
+        bottomSheet.addEventListener('touchmove', e => {
+            const currentY = e.touches[0].clientY;
+            if(currentY - startY > 50) { 
+                closeSheet();
+            }
+        }, {passive: true});
+    </script>
+</body>
+</html>
